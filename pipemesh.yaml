@@ -5,8 +5,8 @@
 # Ordered releases are a pipeline: a job never runs an older revision after
 # a newer one, so `latest` only moves forward.
 
-# The build jobs run in a released runner image, pinned by digest and bumped
-# deliberately (the `image:` below), so a bad release can't break the jobs
+# The build jobs run in a released runner image (r3), pinned by digest and
+# bumped deliberately (the `image:` below), so a bad release can't break the jobs
 # that would replace it.
 
 pipeline:
@@ -24,7 +24,7 @@ pipeline:
       stage: build
       runner: linux-arm64-small
       dockerd: true
-      image: 524843732687.dkr.ecr.us-east-1.amazonaws.com/pipemesh/job-base@sha256:767ce602028a1aa2d6f167e22c254c7b0cbd9a4676ad3cc2e84c33daf0bedc78
+      image: 524843732687.dkr.ecr.us-east-1.amazonaws.com/pipemesh/runner@sha256:4b9b5957092db4b43dd4298aefe59f64e36bab1f7692f894c942f8d422fd3cfb
       checkout:
         - runner
       setup:
@@ -48,7 +48,7 @@ pipeline:
       stage: build
       runner: linux-amd64-small
       dockerd: true
-      image: 524843732687.dkr.ecr.us-east-1.amazonaws.com/pipemesh/job-base@sha256:767ce602028a1aa2d6f167e22c254c7b0cbd9a4676ad3cc2e84c33daf0bedc78
+      image: 524843732687.dkr.ecr.us-east-1.amazonaws.com/pipemesh/runner@sha256:4b9b5957092db4b43dd4298aefe59f64e36bab1f7692f894c942f8d422fd3cfb
       checkout:
         - runner
       setup:
@@ -72,7 +72,7 @@ pipeline:
       job_type: build
       stage: build
       checkout: false
-      image: 524843732687.dkr.ecr.us-east-1.amazonaws.com/pipemesh/job-base@sha256:767ce602028a1aa2d6f167e22c254c7b0cbd9a4676ad3cc2e84c33daf0bedc78
+      image: 524843732687.dkr.ecr.us-east-1.amazonaws.com/pipemesh/runner@sha256:4b9b5957092db4b43dd4298aefe59f64e36bab1f7692f894c942f8d422fd3cfb
       consumes:
         - build_arm64/arm64
         - build_amd64/amd64
@@ -139,7 +139,7 @@ pipeline:
       job_type: deploy
       production: true
       stage: publish
-      image: 524843732687.dkr.ecr.us-east-1.amazonaws.com/pipemesh/job-base@sha256:767ce602028a1aa2d6f167e22c254c7b0cbd9a4676ad3cc2e84c33daf0bedc78
+      image: 524843732687.dkr.ecr.us-east-1.amazonaws.com/pipemesh/runner@sha256:4b9b5957092db4b43dd4298aefe59f64e36bab1f7692f894c942f8d422fd3cfb
       needs:
         - probe_arm64
         - probe_amd64
@@ -171,7 +171,7 @@ checks:
       stage: checks
       runner: linux-arm64-small
       dockerd: true
-      image: 524843732687.dkr.ecr.us-east-1.amazonaws.com/pipemesh/job-base@sha256:767ce602028a1aa2d6f167e22c254c7b0cbd9a4676ad3cc2e84c33daf0bedc78
+      image: 524843732687.dkr.ecr.us-east-1.amazonaws.com/pipemesh/runner@sha256:4b9b5957092db4b43dd4298aefe59f64e36bab1f7692f894c942f8d422fd3cfb
       checkout:
         - runner
         - probe
@@ -184,7 +184,7 @@ checks:
       stage: checks
       runner: linux-amd64-small
       dockerd: true
-      image: 524843732687.dkr.ecr.us-east-1.amazonaws.com/pipemesh/job-base@sha256:767ce602028a1aa2d6f167e22c254c7b0cbd9a4676ad3cc2e84c33daf0bedc78
+      image: 524843732687.dkr.ecr.us-east-1.amazonaws.com/pipemesh/runner@sha256:4b9b5957092db4b43dd4298aefe59f64e36bab1f7692f894c942f8d422fd3cfb
       checkout:
         - runner
         - probe
