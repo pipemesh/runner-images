@@ -19,13 +19,20 @@ ARG AWSCLI_VERSION=2.37.9
 ARG DOCKER_VERSION=5:29.8.2-1~ubuntu.24.04~noble
 
 ENV DEBIAN_FRONTEND=noninteractive \
-    LANG=C.UTF-8
+    LANG=C.UTF-8 \
+    PIP_ROOT_USER_ACTION=ignore
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
          bash ca-certificates curl git gnupg gzip jq less make openssh-client procps \
          python3 python3-pip python3-venv sudo tar tzdata unzip wget xz-utils zip \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -f /usr/lib/python3*/EXTERNALLY-MANAGED
+
+# Ubuntu marks its Python externally managed (PEP 668), so `pip install`
+# outside a venv fails. A job's container lives for one job, and scripts
+# from other CI systems `pip install` tools system-wide, so it is allowed
+# (the marker removed above); a venv works as well.
 
 # Docker, from Docker's own repository (Ubuntu's docker.io lags it).
 RUN install -m 0755 -d /etc/apt/keyrings \
