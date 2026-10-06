@@ -28,7 +28,10 @@ docker compose version
 
 # A script from GitHub Actions runs `sudo apt-get install`.
 sudo -n true
-# Python's usual way to install a tool without touching the system.
+# A tool installed with pip, system-wide (as scripts from other CI
+# systems do) and in a venv.
+python3 -m pip install --quiet --no-deps six
+python3 -c 'import six'
 python3 -m venv /tmp/pipemesh-probe-venv
 /tmp/pipemesh-probe-venv/bin/pip --version
 # The bootstrap downloads and unpacks with these.

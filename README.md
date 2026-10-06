@@ -13,7 +13,7 @@ keeps its `sudo apt-get install`, plus:
 | Shell and VCS | bash, git, openssh-client |
 | Archives and transfer | curl, wget, tar, gzip, xz, zip, unzip |
 | Tools | jq, make, sudo |
-| Python | Python 3.12, pip, venv |
+| Python | Python 3.12, pip (system-wide installs allowed), venv |
 | Node | Node 24 LTS, npm |
 | Cloud | AWS CLI v2 |
 | Docker | Docker Engine 29 (CLI, daemon, buildx, compose) |
