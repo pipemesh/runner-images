@@ -1,11 +1,11 @@
 # pipemesh/runner-images: the image a Pipemesh hosted job runs in when it
 # names no image: (DESIGN-V79). Every revision of main builds it natively
 # on both architectures, probes it on both, and publishes it as
-# job-base:r<revision> and job-base:latest, which the hosted fleet follows.
+# pipemesh/runner:r<revision> and :latest, which the hosted fleet follows.
 # Ordered releases are a pipeline: a job never runs an older revision after
 # a newer one, so `latest` only moves forward.
 
-# The build jobs run in a released job-base, pinned by digest and bumped
+# The build jobs run in a released runner image, pinned by digest and bumped
 # deliberately (the `image:` below), so a bad release can't break the jobs
 # that would replace it.
 
@@ -26,7 +26,7 @@ pipeline:
       dockerd: true
       image: 524843732687.dkr.ecr.us-east-1.amazonaws.com/pipemesh/job-base@sha256:767ce602028a1aa2d6f167e22c254c7b0cbd9a4676ad3cc2e84c33daf0bedc78
       checkout:
-        - job-base
+        - runner
       setup:
         - uses: aws/role@1
           with:
@@ -36,11 +36,11 @@ pipeline:
         arm64: oci
       script: |
         REGISTRY=524843732687.dkr.ecr.us-east-1.amazonaws.com
-        IMAGE=$REGISTRY/pipemesh/job-base
+        IMAGE=$REGISTRY/pipemesh/runner
         aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin "$REGISTRY"
         docker buildx create --use --driver-opt image=moby/buildkit:buildx-stable-1@sha256:cec9f139f45e93c5c69c60f8b07cfad9f43f4ef6b6a6cd917527fea5ff2e3dea
         docker buildx build --platform linux/arm64 --sbom=true --provenance=mode=max --push \
-          --metadata-file meta.json -t "$IMAGE:build-$CI_COMMIT_SHORT_SHA-arm64" job-base
+          --metadata-file meta.json -t "$IMAGE:build-$CI_COMMIT_SHORT_SHA-arm64" runner
         pipemesh produce oci arm64 --ref "$IMAGE" --digest "$(jq -r '."containerimage.digest"' meta.json)"
 
     build_amd64:
@@ -50,7 +50,7 @@ pipeline:
       dockerd: true
       image: 524843732687.dkr.ecr.us-east-1.amazonaws.com/pipemesh/job-base@sha256:767ce602028a1aa2d6f167e22c254c7b0cbd9a4676ad3cc2e84c33daf0bedc78
       checkout:
-        - job-base
+        - runner
       setup:
         - uses: aws/role@1
           with:
@@ -60,11 +60,11 @@ pipeline:
         amd64: oci
       script: |
         REGISTRY=524843732687.dkr.ecr.us-east-1.amazonaws.com
-        IMAGE=$REGISTRY/pipemesh/job-base
+        IMAGE=$REGISTRY/pipemesh/runner
         aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin "$REGISTRY"
         docker buildx create --use --driver-opt image=moby/buildkit:buildx-stable-1@sha256:cec9f139f45e93c5c69c60f8b07cfad9f43f4ef6b6a6cd917527fea5ff2e3dea
         docker buildx build --platform linux/amd64 --sbom=true --provenance=mode=max --push \
-          --metadata-file meta.json -t "$IMAGE:build-$CI_COMMIT_SHORT_SHA-amd64" job-base
+          --metadata-file meta.json -t "$IMAGE:build-$CI_COMMIT_SHORT_SHA-amd64" runner
         pipemesh produce oci amd64 --ref "$IMAGE" --digest "$(jq -r '."containerimage.digest"' meta.json)"
 
     # One tag for both: a pod pulls its own architecture's image from it.
@@ -85,7 +85,7 @@ pipeline:
         image: oci
       script: |
         REGISTRY=524843732687.dkr.ecr.us-east-1.amazonaws.com
-        IMAGE=$REGISTRY/pipemesh/job-base
+        IMAGE=$REGISTRY/pipemesh/runner
         aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin "$REGISTRY"
         docker buildx imagetools create -t "$IMAGE:build-$CI_COMMIT_SHORT_SHA" \
           "$PIPEMESH_BUILD_ARM64_ARM64" "$PIPEMESH_BUILD_AMD64_AMD64"
@@ -154,10 +154,10 @@ pipeline:
             region: us-east-1
       script: |
         REGISTRY=524843732687.dkr.ecr.us-east-1.amazonaws.com
-        IMAGE=$REGISTRY/pipemesh/job-base
+        IMAGE=$REGISTRY/pipemesh/runner
         aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin "$REGISTRY"
         docker buildx imagetools create -t "$IMAGE:r$PIPEMESH_REVISION" -t "$IMAGE:latest" "$PIPEMESH_INDEX_IMAGE"
-        echo "[publish] job-base r$PIPEMESH_REVISION = ${PIPEMESH_INDEX_IMAGE#*@} (latest)"
+        echo "[publish] pipemesh/runner r$PIPEMESH_REVISION = ${PIPEMESH_INDEX_IMAGE#*@} (latest)"
 
 # Pull requests: both architectures built natively and probed, nothing
 # pushed.
@@ -173,10 +173,10 @@ checks:
       dockerd: true
       image: 524843732687.dkr.ecr.us-east-1.amazonaws.com/pipemesh/job-base@sha256:767ce602028a1aa2d6f167e22c254c7b0cbd9a4676ad3cc2e84c33daf0bedc78
       checkout:
-        - job-base
+        - runner
         - probe
       script: |
-        docker build -t candidate job-base
+        docker build -t candidate runner
         docker run --rm -i candidate bash -s < probe/probe.sh
 
     image_amd64:
@@ -186,10 +186,10 @@ checks:
       dockerd: true
       image: 524843732687.dkr.ecr.us-east-1.amazonaws.com/pipemesh/job-base@sha256:767ce602028a1aa2d6f167e22c254c7b0cbd9a4676ad3cc2e84c33daf0bedc78
       checkout:
-        - job-base
+        - runner
         - probe
       script: |
-        docker build -t candidate job-base
+        docker build -t candidate runner
         docker run --rm -i candidate bash -s < probe/probe.sh
 
 pipemesh:
