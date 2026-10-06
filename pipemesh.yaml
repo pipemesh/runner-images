@@ -1,0 +1,201 @@
+# pipemesh/runner-images: the image a Pipemesh hosted job runs in when it
+# names no image: (DESIGN-V79). Every revision of main builds it natively
+# on both architectures, probes it on both, and publishes it as
+# job-base:r<revision> and job-base:latest, which the hosted fleet follows.
+# Ordered releases are a pipeline: a job never runs an older revision after
+# a newer one, so `latest` only moves forward.
+
+# The build jobs run in a released job-base, pinned by digest and bumped
+# deliberately (the `image:` below), so a bad release can't break the jobs
+# that would replace it.
+
+pipeline:
+  type: pipeline
+  stages:
+    - build
+    - probe
+    - publish
+
+  jobs:
+    # Each architecture on its own machines: no emulation. An SBOM and the
+    # build's provenance are pushed with each image.
+    build_arm64:
+      job_type: build
+      stage: build
+      runner: linux-arm64-small
+      dockerd: true
+      image: 524843732687.dkr.ecr.us-east-1.amazonaws.com/pipemesh/job-base@sha256:767ce602028a1aa2d6f167e22c254c7b0cbd9a4676ad3cc2e84c33daf0bedc78
+      checkout:
+        - job-base
+      setup:
+        - uses: aws/role@1
+          with:
+            arn: arn:aws:iam::524843732687:role/pipemesh-image-push
+            region: us-east-1
+      produces:
+        arm64: oci
+      script: |
+        REGISTRY=524843732687.dkr.ecr.us-east-1.amazonaws.com
+        IMAGE=$REGISTRY/pipemesh/job-base
+        aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin "$REGISTRY"
+        docker buildx create --use --driver-opt image=moby/buildkit:buildx-stable-1@sha256:cec9f139f45e93c5c69c60f8b07cfad9f43f4ef6b6a6cd917527fea5ff2e3dea
+        docker buildx build --platform linux/arm64 --sbom=true --provenance=mode=max --push \
+          --metadata-file meta.json -t "$IMAGE:build-$CI_COMMIT_SHORT_SHA-arm64" job-base
+        pipemesh produce oci arm64 --ref "$IMAGE" --digest "$(jq -r '."containerimage.digest"' meta.json)"
+
+    build_amd64:
+      job_type: build
+      stage: build
+      runner: linux-amd64-small
+      dockerd: true
+      image: 524843732687.dkr.ecr.us-east-1.amazonaws.com/pipemesh/job-base@sha256:767ce602028a1aa2d6f167e22c254c7b0cbd9a4676ad3cc2e84c33daf0bedc78
+      checkout:
+        - job-base
+      setup:
+        - uses: aws/role@1
+          with:
+            arn: arn:aws:iam::524843732687:role/pipemesh-image-push
+            region: us-east-1
+      produces:
+        amd64: oci
+      script: |
+        REGISTRY=524843732687.dkr.ecr.us-east-1.amazonaws.com
+        IMAGE=$REGISTRY/pipemesh/job-base
+        aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin "$REGISTRY"
+        docker buildx create --use --driver-opt image=moby/buildkit:buildx-stable-1@sha256:cec9f139f45e93c5c69c60f8b07cfad9f43f4ef6b6a6cd917527fea5ff2e3dea
+        docker buildx build --platform linux/amd64 --sbom=true --provenance=mode=max --push \
+          --metadata-file meta.json -t "$IMAGE:build-$CI_COMMIT_SHORT_SHA-amd64" job-base
+        pipemesh produce oci amd64 --ref "$IMAGE" --digest "$(jq -r '."containerimage.digest"' meta.json)"
+
+    # One tag for both: a pod pulls its own architecture's image from it.
+    index:
+      job_type: build
+      stage: build
+      checkout: false
+      image: 524843732687.dkr.ecr.us-east-1.amazonaws.com/pipemesh/job-base@sha256:767ce602028a1aa2d6f167e22c254c7b0cbd9a4676ad3cc2e84c33daf0bedc78
+      consumes:
+        - build_arm64/arm64
+        - build_amd64/amd64
+      setup:
+        - uses: aws/role@1
+          with:
+            arn: arn:aws:iam::524843732687:role/pipemesh-image-push
+            region: us-east-1
+      produces:
+        image: oci
+      script: |
+        REGISTRY=524843732687.dkr.ecr.us-east-1.amazonaws.com
+        IMAGE=$REGISTRY/pipemesh/job-base
+        aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin "$REGISTRY"
+        docker buildx imagetools create -t "$IMAGE:build-$CI_COMMIT_SHORT_SHA" \
+          "$PIPEMESH_BUILD_ARM64_ARM64" "$PIPEMESH_BUILD_AMD64_AMD64"
+        digest=$(docker buildx imagetools inspect "$IMAGE:build-$CI_COMMIT_SHORT_SHA" --format '{{json .Manifest}}' | jq -r .digest)
+        pipemesh produce oci image --ref "$IMAGE" --digest "$digest"
+
+    # What every release must pass, in the image itself, on each
+    # architecture; and its own Docker daemon, which `dockerd: true` starts.
+    probe_arm64:
+      job_type: build
+      stage: probe
+      runner: linux-arm64-small
+      image_from: index/image
+      checkout:
+        - probe
+      script: bash probe/probe.sh
+
+    probe_amd64:
+      job_type: build
+      stage: probe
+      runner: linux-amd64-small
+      image_from: index/image
+      checkout:
+        - probe
+      script: bash probe/probe.sh
+
+    probe_docker_arm64:
+      job_type: build
+      stage: probe
+      runner: linux-arm64-small
+      dockerd: true
+      image_from: index/image
+      checkout:
+        - probe
+      script: bash probe/docker.sh
+
+    probe_docker_amd64:
+      job_type: build
+      stage: probe
+      runner: linux-amd64-small
+      dockerd: true
+      image_from: index/image
+      checkout:
+        - probe
+      script: bash probe/docker.sh
+
+    # The release: the probed index as r<revision> and latest, by digest
+    # (no pull). Every hosted job without image: runs in latest from the
+    # next pod on. A rollback moves latest back to an earlier r<revision>.
+    publish:
+      job_type: deploy
+      production: true
+      stage: publish
+      image: 524843732687.dkr.ecr.us-east-1.amazonaws.com/pipemesh/job-base@sha256:767ce602028a1aa2d6f167e22c254c7b0cbd9a4676ad3cc2e84c33daf0bedc78
+      needs:
+        - probe_arm64
+        - probe_amd64
+        - probe_docker_arm64
+        - probe_docker_amd64
+      consumes:
+        - index/image
+      setup:
+        - uses: aws/role@1
+          with:
+            arn: arn:aws:iam::524843732687:role/pipemesh-image-push
+            region: us-east-1
+      script: |
+        REGISTRY=524843732687.dkr.ecr.us-east-1.amazonaws.com
+        IMAGE=$REGISTRY/pipemesh/job-base
+        aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin "$REGISTRY"
+        docker buildx imagetools create -t "$IMAGE:r$PIPEMESH_REVISION" -t "$IMAGE:latest" "$PIPEMESH_INDEX_IMAGE"
+        echo "[publish] job-base r$PIPEMESH_REVISION = ${PIPEMESH_INDEX_IMAGE#*@} (latest)"
+
+# Pull requests: both architectures built natively and probed, nothing
+# pushed.
+checks:
+  type: workflow
+  stages:
+    - checks
+  jobs:
+    image_arm64:
+      job_type: build
+      stage: checks
+      runner: linux-arm64-small
+      dockerd: true
+      image: 524843732687.dkr.ecr.us-east-1.amazonaws.com/pipemesh/job-base@sha256:767ce602028a1aa2d6f167e22c254c7b0cbd9a4676ad3cc2e84c33daf0bedc78
+      checkout:
+        - job-base
+        - probe
+      script: |
+        docker build -t candidate job-base
+        docker run --rm -i candidate bash -s < probe/probe.sh
+
+    image_amd64:
+      job_type: build
+      stage: checks
+      runner: linux-amd64-small
+      dockerd: true
+      image: 524843732687.dkr.ecr.us-east-1.amazonaws.com/pipemesh/job-base@sha256:767ce602028a1aa2d6f167e22c254c7b0cbd9a4676ad3cc2e84c33daf0bedc78
+      checkout:
+        - job-base
+        - probe
+      script: |
+        docker build -t candidate job-base
+        docker run --rm -i candidate bash -s < probe/probe.sh
+
+pipemesh:
+  pipelines:
+    pipeline: !ref pipeline
+  workflows:
+    checks:
+      body: !ref checks
+      on: pull_request
