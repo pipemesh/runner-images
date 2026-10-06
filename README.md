@@ -1,7 +1,7 @@
 # runner-images
 
 The image a [Pipemesh](https://pipemesh.io) hosted job runs in when it
-names no `image:`: `job-base`, for Linux arm64 and amd64.
+names no `image:`: `pipemesh/runner`, for Linux arm64 and amd64.
 
 ## What it carries
 
@@ -33,7 +33,9 @@ Pipemesh runs as it is.
    `probe/docker.sh` (the daemon starts, builds and runs a container) in
    the image, on both architectures.
 3. **publish**: tags the probed image `r<revision>` and `latest`. Hosted
-   jobs without `image:` run in `latest` from their next pod.
+   jobs without `image:` run in `latest` from their next pod. An Ubuntu
+   upgrade is a release like any other, announced ahead; the revision
+   keeps counting.
 
 An unchanged image is not built or published again. A pull request builds
 and probes both architectures without publishing anything.
