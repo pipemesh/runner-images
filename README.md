@@ -35,7 +35,12 @@ Pipemesh runs as it is.
 3. **publish**: tags the probed image `r<revision>` and `latest`. Hosted
    jobs without `image:` run in `latest` from their next pod. An Ubuntu
    upgrade is a release like any other, announced ahead; the revision
-   keeps counting.
+   keeps counting. The same image, by the same digest, is then copied to
+   **`ghcr.io/pipemesh/runner`** (`r<revision>` and `latest`), public:
+   the image a self-hosted Pipemesh runs its jobs in when they name none
+   (the chart's `runner.defaultImage` pins one release by digest). A
+   GitHub Actions workflow (`.github/workflows/ghcr.yml`) does the copy
+   with the run's own token.
 
 An unchanged image is not built or published again. A pull request builds
 and probes both architectures without publishing anything.
