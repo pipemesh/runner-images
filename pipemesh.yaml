@@ -74,8 +74,8 @@ pipeline:
       checkout: false
       image: 524843732687.dkr.ecr.us-east-1.amazonaws.com/pipemesh/runner@sha256:4b9b5957092db4b43dd4298aefe59f64e36bab1f7692f894c942f8d422fd3cfb
       consumes:
-        - build_arm64/arm64
-        - build_amd64/amd64
+        ARM64: build_arm64/arm64
+        AMD64: build_amd64/amd64
       setup:
         - uses: aws/role@1
           with:
@@ -88,7 +88,7 @@ pipeline:
         IMAGE=$REGISTRY/pipemesh/runner
         aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin "$REGISTRY"
         docker buildx imagetools create -t "$IMAGE:build-$CI_COMMIT_SHORT_SHA" \
-          "$PIPEMESH_BUILD_ARM64_ARM64" "$PIPEMESH_BUILD_AMD64_AMD64"
+          "$ARM64" "$AMD64"
         digest=$(docker buildx imagetools inspect "$IMAGE:build-$CI_COMMIT_SHORT_SHA" --format '{{json .Manifest}}' | jq -r .digest)
         pipemesh produce oci image --ref "$IMAGE" --digest "$digest"
 
@@ -146,7 +146,7 @@ pipeline:
         - probe_docker_arm64
         - probe_docker_amd64
       consumes:
-        - index/image
+        CANDIDATE: index/image
       setup:
         - uses: aws/role@1
           with:
@@ -156,8 +156,26 @@ pipeline:
         REGISTRY=524843732687.dkr.ecr.us-east-1.amazonaws.com
         IMAGE=$REGISTRY/pipemesh/runner
         aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin "$REGISTRY"
-        docker buildx imagetools create -t "$IMAGE:r$PIPEMESH_REVISION" -t "$IMAGE:latest" "$PIPEMESH_INDEX_IMAGE"
-        echo "[publish] pipemesh/runner r$PIPEMESH_REVISION = ${PIPEMESH_INDEX_IMAGE#*@} (latest)"
+        docker buildx imagetools create -t "$IMAGE:r$PIPEMESH_REVISION" -t "$IMAGE:latest" "$CANDIDATE"
+        echo "[publish] pipemesh/runner r$PIPEMESH_REVISION = ${CANDIDATE#*@} (latest)"
+
+    # The public copy, for every instance that isn't Pipemesh Cloud: the
+    # release as it is (same index, same digest) at ghcr.io/pipemesh/runner,
+    # under the r<revision> it has in ECR, and latest. The chart's default
+    # job image is one of these, pinned. One GitHub Actions job
+    # (.github/workflows/ghcr.yml) does the copy: it reads ECR through the
+    # pipemesh-runner-copy role (GitHub's OIDC token) and pushes with the
+    # run's own GITHUB_TOKEN, so no credential is stored.
+    publish_ghcr:
+      job_type: build
+      stage: publish
+      needs:
+        - publish
+      consumes:
+        CANDIDATE: index/image
+      produces:
+        image: oci
+      github_actions: ghcr.yml
 
 # Pull requests: both architectures built natively and probed, nothing
 # pushed.

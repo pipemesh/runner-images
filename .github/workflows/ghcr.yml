@@ -1,0 +1,60 @@
+# Copies a release of pipemesh/runner from ECR to ghcr.io/pipemesh/runner,
+# under the r<revision> tag it has in ECR and latest: the public copy
+# self-hosted instances run their jobs in. Dispatched by the `publish_ghcr`
+# job of pipemesh.yaml once the release is tagged in ECR (its revision is
+# the one that built the image, not necessarily the dispatching one: an
+# unchanged image is not published again). The index is copied, not rebuilt, so the
+# GHCR digest is the one the probes ran (checked below), attestations
+# included. ECR is read through the pipemesh-runner-copy role with GitHub's
+# OIDC token; GHCR is written with the run's own GITHUB_TOKEN. Nothing is
+# stored.
+on:
+  workflow_dispatch:
+    inputs:
+      pipemesh_sha:
+        type: string
+        required: true
+      pipemesh_run:
+        type: string
+        required: true
+run-name: ghcr · ${{ inputs.pipemesh_run }}
+permissions:
+  id-token: write
+  contents: read
+  packages: write
+jobs:
+  copy:
+    runs-on: ubuntu-latest
+    steps:
+      # The job's consumed entry, as its definition names it: the probed
+      # index (ECR ref@digest) lands in the environment as CANDIDATE.
+      - uses: pipemesh/consume@ac8ca5e7aab616af1c32046082baefc100801a97 # v1.0.1
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: arn:aws:iam::524843732687:role/pipemesh-runner-copy
+          aws-region: us-east-1
+      - run: aws ecr get-login-password | docker login --username AWS --password-stdin 524843732687.dkr.ecr.us-east-1.amazonaws.com
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: copy
+        run: |
+          set -euo pipefail
+          src=$CANDIDATE digest=${CANDIDATE#*@}
+          [[ "$src" == 524843732687.dkr.ecr.us-east-1.amazonaws.com/pipemesh/runner@sha256:* ]] || { echo "unexpected release reference: $src"; exit 1; }
+          rev=$(aws ecr describe-images --repository-name pipemesh/runner --image-ids "imageDigest=$digest" \
+            --query 'imageDetails[0].imageTags' --output text | tr '\t' '\n' | grep -E '^r[0-9]+$' | sort -V | tail -1) || rev=
+          [ -n "$rev" ] || { echo "$digest has no r<revision> tag in ECR: not released"; exit 1; }
+          docker buildx imagetools create -t "ghcr.io/pipemesh/runner:$rev" -t ghcr.io/pipemesh/runner:latest "$src"
+          got=$(docker buildx imagetools inspect "ghcr.io/pipemesh/runner:$rev" --format '{{.Manifest.Digest}}')
+          [ "$got" = "$digest" ] || { echo "GHCR digest $got is not the release digest $digest"; exit 1; }
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "ghcr.io/pipemesh/runner:$rev = $digest (latest)"
+      - uses: pipemesh/produce@c033130934389f45a05989a3076807079316a56a # v1.1.2
+        with:
+          key: image
+          type: oci
+          ref: ghcr.io/pipemesh/runner
+          digest: ${{ steps.copy.outputs.digest }}
