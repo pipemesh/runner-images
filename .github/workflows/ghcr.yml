@@ -7,7 +7,9 @@
 # GHCR digest is the one the probes ran (checked below), attestations
 # included. ECR is read through the pipemesh-runner-copy role with GitHub's
 # OIDC token; GHCR is written with the run's own GITHUB_TOKEN. Nothing is
-# stored.
+# stored. This repository uses GitHub's immutable OIDC subject
+# (repo:pipemesh@240354843/runner-images@1406938489:ref:refs/heads/main),
+# which is what the role trusts: dispatch on main only.
 on:
   workflow_dispatch:
     inputs:
