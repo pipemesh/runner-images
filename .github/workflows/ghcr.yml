@@ -30,7 +30,7 @@ jobs:
     steps:
       # The job's consumed entry, as its definition names it: the probed
       # index (ECR ref@digest) lands in the environment as CANDIDATE.
-      - uses: pipemesh/consume@ac8ca5e7aab616af1c32046082baefc100801a97 # v1.0.1
+      - uses: pipemesh/consume@c76a0543f709397db7e2b63a166f1006361a50c8 # v1.0.2
       - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           role-to-assume: arn:aws:iam::524843732687:role/pipemesh-runner-copy
