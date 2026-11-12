@@ -33,7 +33,8 @@ Pipemesh runs as it is.
    `probe/docker.sh` (the daemon starts, builds and runs a container) in
    the image, on both architectures.
 3. **publish**: tags the probed image `r<revision>` and `latest`. Hosted
-   jobs without `image:` run in `latest` from their next pod. An Ubuntu
+   jobs without `image:` run one release by digest, which Pipemesh Cloud
+   moves to a new release in a reviewed change of its own. An Ubuntu
    upgrade is a release like any other, announced ahead; the revision
    keeps counting. The same image, by the same digest, is then copied to
    **`ghcr.io/pipemesh/runner`** (`r<revision>` and `latest`), public:

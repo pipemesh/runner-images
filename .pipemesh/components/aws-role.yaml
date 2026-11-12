@@ -1,0 +1,53 @@
+# Security review 2026-10-30, C4: the registry's aws/role component, kept
+# here so what runs before the image and deploy jobs' scripts, with their
+# roles' credentials, changes only through a reviewed pull request. `uses:
+# aws/role@1` resolved the moving `1` tag of ghcr.io/pipemesh/components/aws
+# on every load, so whoever could push that tag chose it.
+#
+# Copied unchanged from aws 1.5.0: manifest
+# sha256:808b244dbef90a56c86520ec0e7a16a4a10c6a8e18cb7d795ff2e7f58c1b39e1,
+# pipemesh/components@a6c2410c455ef05f2f0e5b06c355112fd2eb7be0 (2026-11-11).
+# A newer release is taken by copying it here.
+#
+# AWS credentials from the job's Pipemesh identity (no stored keys): the
+# component declares the identity token it needs, for AWS's audience
+# (DESIGN-V121 §9.2), and Pipemesh mints it when the job starts. The SDK's
+# native web-identity environment is exported from it; every AWS SDK/CLI
+# call after these lines assumes the role automatically. The token lasts as
+# long as the job's own token (its timeout plus an hour), so the SDK's
+# re-reads when the hour-long session runs out still find it valid.
+type: component
+name: role
+params:
+  arn:
+    type: string
+    required: true
+  region:
+    type: string
+    required: true
+  audience:
+    type: string
+    default: sts.amazonaws.com
+job:
+  id_tokens:
+    AWS_ROLE_ID_TOKEN:
+      aud: ${{ params.audience }}
+  script: |
+    [ -n "${AWS_ROLE_ID_TOKEN:-}" ] || echo "[aws/role] no identity token for ${{ params.audience }}: AWS calls will fail to assume the role"
+    (umask 077; printf '%s' "${AWS_ROLE_ID_TOKEN:-}" > /tmp/.pipemesh-web-identity)
+    export AWS_WEB_IDENTITY_TOKEN_FILE=/tmp/.pipemesh-web-identity
+    export AWS_ROLE_ARN=${{ params.arn }}
+    export AWS_ROLE_SESSION_NAME=pipemesh-job
+    export AWS_REGION=${{ params.region }}
+    # The exchange needs the issuer's signing keys from the Pipemesh
+    # instance; while that instance rolls, the first call can fail
+    # (release 328's infra job, 2026-09-16). Warm the exchange up with a
+    # few attempts so a rollout is a pause here, not a failed job. When
+    # every attempt fails the job goes on and its own first call reports.
+    if command -v aws >/dev/null 2>&1; then
+      for pipemesh_try in 1 2 3 4 5 6; do
+        if aws sts get-caller-identity >/dev/null 2>/tmp/.pipemesh-sts-err; then break; fi
+        echo "[aws/role] web-identity exchange failed (attempt $pipemesh_try/6): $(head -c 200 /tmp/.pipemesh-sts-err)"
+        [ "$pipemesh_try" = 6 ] || sleep $((pipemesh_try * 10))
+      done
+    fi

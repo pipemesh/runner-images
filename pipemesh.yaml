@@ -1,13 +1,22 @@
 # pipemesh/runner-images: the image a Pipemesh hosted job runs in when it
 # names no image: (DESIGN-V79). Every revision of main builds it natively
 # on both architectures, probes it on both, and publishes it as
-# pipemesh/runner:r<revision> and :latest, which the hosted fleet follows.
-# Ordered releases are a pipeline: a job never runs an older revision after
-# a newer one, so `latest` only moves forward.
+# pipemesh/runner:r<revision> and :latest. Ordered releases are a pipeline:
+# a job never runs an older revision after a newer one, so `latest` only
+# moves forward. The hosted fleet doesn't follow `latest`: it runs one
+# release by digest, DEFAULT_JOB_IMAGE in pipemesh-cloud's
+# infra/lib/app-stack.ts, and a release reaches it when a pipemesh-cloud
+# pull request bumps that (security review 2026-10-30, C7).
 
 # The build jobs run in a released runner image (r3), pinned by digest and
 # bumped deliberately (the `image:` below), so a bad release can't break the jobs
 # that would replace it.
+
+# The push jobs' credentials come from the registry's aws/role, kept in
+# this repository (.pipemesh/components/aws-role.yaml): `aws/role@1`
+# resolved a moving tag, outside review (security review 2026-10-30, C4).
+# Their role, pipemesh-image-push, trusts these four jobs by name
+# (pipemesh-cloud's infra/lib/cluster-stack.ts): a renamed one can't push.
 
 pipeline:
   type: pipeline
@@ -28,7 +37,7 @@ pipeline:
       checkout:
         - runner
       setup:
-        - uses: aws/role@1
+        - uses: ./.pipemesh/components/aws-role.yaml
           with:
             arn: arn:aws:iam::524843732687:role/pipemesh-image-push
             region: us-east-1
@@ -52,7 +61,7 @@ pipeline:
       checkout:
         - runner
       setup:
-        - uses: aws/role@1
+        - uses: ./.pipemesh/components/aws-role.yaml
           with:
             arn: arn:aws:iam::524843732687:role/pipemesh-image-push
             region: us-east-1
@@ -77,7 +86,7 @@ pipeline:
         ARM64: build_arm64/arm64
         AMD64: build_amd64/amd64
       setup:
-        - uses: aws/role@1
+        - uses: ./.pipemesh/components/aws-role.yaml
           with:
             arn: arn:aws:iam::524843732687:role/pipemesh-image-push
             region: us-east-1
@@ -133,8 +142,10 @@ pipeline:
       script: bash probe/docker.sh
 
     # The release: the probed index as r<revision> and latest, by digest
-    # (no pull). Every hosted job without image: runs in latest from the
-    # next pod on. A rollback moves latest back to an earlier r<revision>.
+    # (no pull). Hosted jobs without image: run it once a pipemesh-cloud
+    # pull request sets DEFAULT_JOB_IMAGE (infra/lib/app-stack.ts) to the
+    # digest printed below; until then they keep the release they run. A
+    # rollback sets DEFAULT_JOB_IMAGE back to an earlier r<revision>.
     publish:
       job_type: deploy
       production: true
@@ -148,7 +159,7 @@ pipeline:
       consumes:
         CANDIDATE: index/image
       setup:
-        - uses: aws/role@1
+        - uses: ./.pipemesh/components/aws-role.yaml
           with:
             arn: arn:aws:iam::524843732687:role/pipemesh-image-push
             region: us-east-1
