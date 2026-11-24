@@ -178,6 +178,19 @@ pipeline:
         docker buildx imagetools create -t "$IMAGE:r$PIPEMESH_REVISION" -t "$IMAGE:latest" "$CANDIDATE"
         echo "[publish] pipemesh/runner r$PIPEMESH_REVISION = ${CANDIDATE#*@} (latest)"
 
+    # DESIGN-V146: the release, handed to the organization's other
+    # repositories as github.com/pipemesh/runner-images:runner. A job there
+    # reads it with consumes: { RUNNER_IMAGE: github.com/pipemesh/runner-images:runner }
+    # and image: !env RUNNER_IMAGE; each revision pins one version. It
+    # changes nothing for the hosted fleet, which still runs DEFAULT_JOB_IMAGE.
+    export_runner:
+      job_type: export
+      stage: publish
+      needs:
+        - publish
+      exports:
+        runner: index/image
+
     # The public copy, for every instance that isn't Pipemesh Cloud: the
     # release as it is (same index, same digest) at ghcr.io/pipemesh/runner,
     # under the r<revision> it has in ECR, and latest. The chart's default
