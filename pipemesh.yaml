@@ -107,7 +107,9 @@ pipeline:
       job_type: build
       stage: probe
       runner: linux-arm64-small
-      image_from: index/image
+      consumes:
+        JOB_IMAGE: index/image
+      image: !env JOB_IMAGE
       checkout:
         - probe
       script: bash probe/probe.sh
@@ -116,7 +118,9 @@ pipeline:
       job_type: build
       stage: probe
       runner: linux-amd64-small
-      image_from: index/image
+      consumes:
+        JOB_IMAGE: index/image
+      image: !env JOB_IMAGE
       checkout:
         - probe
       script: bash probe/probe.sh
@@ -126,7 +130,9 @@ pipeline:
       stage: probe
       runner: linux-arm64-small
       dockerd: true
-      image_from: index/image
+      consumes:
+        JOB_IMAGE: index/image
+      image: !env JOB_IMAGE
       checkout:
         - probe
       script: bash probe/docker.sh
@@ -136,7 +142,9 @@ pipeline:
       stage: probe
       runner: linux-amd64-small
       dockerd: true
-      image_from: index/image
+      consumes:
+        JOB_IMAGE: index/image
+      image: !env JOB_IMAGE
       checkout:
         - probe
       script: bash probe/docker.sh
